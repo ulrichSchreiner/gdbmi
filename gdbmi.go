@@ -190,8 +190,16 @@ type GDBResult struct {
 
 type GDBAsyncType int
 type GDBStopReason int
+type BreakpointType int
+type BreakpointDispositionType int
 
 const (
+	BP_breakpoint BreakpointType = iota
+	BP_catchpoint
+
+	BP_breakpointDisposition_delete = iota
+	BP_breakpointDisposition_keep
+
 	Async_unknown GDBAsyncType = iota
 	Async_running
 	Async_stopped
@@ -235,82 +243,189 @@ const (
 	Async_stopped_exec
 )
 
+type StopReasons struct {
+	stopReason2Id map[string]GDBStopReason
+	stopId2Reason map[GDBStopReason]string
+}
+
+func (st *StopReasons) add(name string, r GDBStopReason) {
+	st.stopId2Reason[r] = name
+	st.stopReason2Id[name] = r
+}
+func NewStopReasons() *StopReasons {
+	var sr StopReasons
+	sr.stopReason2Id = make(map[string]GDBStopReason)
+	sr.stopId2Reason = make(map[GDBStopReason]string)
+	return &sr
+}
+
+func StopReasonWithName(n string) (GDBStopReason, bool) {
+	sr, ok := stopReasons.stopReason2Id[n]
+	return sr, ok
+}
+
+type AsyncTypes struct {
+	asyncName2TypeId map[string]GDBAsyncType
+	asyncTypeId2Name map[GDBAsyncType]string
+}
+
+func (st *AsyncTypes) add(name string, r GDBAsyncType) {
+	st.asyncTypeId2Name[r] = name
+	st.asyncName2TypeId[name] = r
+}
+func NewAsyncTypes() *AsyncTypes {
+	var at AsyncTypes
+	at.asyncName2TypeId = make(map[string]GDBAsyncType)
+	at.asyncTypeId2Name = make(map[GDBAsyncType]string)
+	return &at
+}
+
+func AsyncTypeWithName(n string) (GDBAsyncType, bool) {
+	at, ok := asyncTypes.asyncName2TypeId[n]
+	return at, ok
+}
+
+type ResultTypes struct {
+	resultId2Type map[GDBResultType]string
+	resultType2Id map[string]GDBResultType
+}
+
+func (rt *ResultTypes) add(name string, r GDBResultType) {
+	rt.resultId2Type[r] = name
+	rt.resultType2Id[name] = r
+}
+func NewResultTypes() *ResultTypes {
+	var rt ResultTypes
+	rt.resultType2Id = make(map[string]GDBResultType)
+	rt.resultId2Type = make(map[GDBResultType]string)
+	return &rt
+}
+
+func ResultTypeWithName(n string) (GDBResultType, bool) {
+	rt, ok := resultTypes.resultType2Id[n]
+	return rt, ok
+}
+
+type BreakpointTypes struct {
+	breakId2Name map[BreakpointType]string
+	breakName2Id map[string]BreakpointType
+}
+
+func NewBreakpointTypes() *BreakpointTypes {
+	var bp BreakpointTypes
+	bp.breakId2Name = make(map[BreakpointType]string)
+	bp.breakName2Id = make(map[string]BreakpointType)
+	return &bp
+}
+func (bp *BreakpointTypes) add(name string, r BreakpointType) {
+	bp.breakId2Name[r] = name
+	bp.breakName2Id[name] = r
+}
+func BreakpointWithName(n string) (BreakpointType, bool) {
+	bp, ok := breakpointTypes.breakName2Id[n]
+	return bp, ok
+}
+
+type BreakpointDispositionTypes struct {
+	breakId2Name map[BreakpointDispositionType]string
+	breakName2Id map[string]BreakpointDispositionType
+}
+
+func NewBreakpointDispositionTypes() *BreakpointDispositionTypes {
+	var bp BreakpointDispositionTypes
+	bp.breakId2Name = make(map[BreakpointDispositionType]string)
+	bp.breakName2Id = make(map[string]BreakpointDispositionType)
+	return &bp
+}
+func (bp *BreakpointDispositionTypes) add(name string, r BreakpointDispositionType) {
+	bp.breakId2Name[r] = name
+	bp.breakName2Id[name] = r
+}
+func BreakpointDispositionWithName(n string) (BreakpointDispositionType, bool) {
+	bp, ok := breakpointDispositionTypes.breakName2Id[n]
+	return bp, ok
+}
+
 var (
-	stopReason2Id    = make(map[string]GDBStopReason)
-	stopId2Reason    = make(map[GDBStopReason]string)
-	asyncName2TypeId = make(map[string]GDBAsyncType)
-	asyncTypeId2Name = make(map[GDBAsyncType]string)
-	resultId2Type    = make(map[GDBResultType]string)
-	resultType2Id    = make(map[string]GDBResultType)
+	stopReasons                = NewStopReasons()
+	asyncTypes                 = NewAsyncTypes()
+	resultTypes                = NewResultTypes()
+	breakpointTypes            = NewBreakpointTypes()
+	breakpointDispositionTypes = NewBreakpointDispositionTypes()
 )
 
 func init() {
-	resultType2Id["done"] = Result_done
-	resultType2Id["running"] = Result_running
-	resultType2Id["connected"] = Result_connected
-	resultType2Id["error"] = Result_error
-	resultType2Id["exit"] = Result_exit
-	for k, v := range resultType2Id {
-		resultId2Type[v] = k
-	}
-	asyncName2TypeId["running"] = Async_running
-	asyncName2TypeId["stopped"] = Async_stopped
-	asyncName2TypeId["thread-group-added"] = Async_thread_group_added
-	asyncName2TypeId["thread-group-removed"] = Async_thread_group_removed
-	asyncName2TypeId["thread-group-started"] = Async_thread_group_started
-	asyncName2TypeId["thread-group-exited"] = Async_thread_group_exited
-	asyncName2TypeId["thread-created"] = Async_thread_created
-	asyncName2TypeId["thread-exited"] = Async_thread_exited
-	asyncName2TypeId["thread-selected"] = Async_thread_selected
-	asyncName2TypeId["library-loaded"] = Async_library_loaded
-	asyncName2TypeId["library-unloaded"] = Async_library_unloaded
-	asyncName2TypeId["traceframe-changed"] = Async_traceframe_changed
-	asyncName2TypeId["tsv-created"] = Async_tsv_created
-	asyncName2TypeId["tsv-deleted"] = Async_tsv_deleted
-	asyncName2TypeId["tsv-modified"] = Async_tsv_modified
-	asyncName2TypeId["breakpoint-created"] = Async_breakpoint_created
-	asyncName2TypeId["breakpoint-modified"] = Async_breakpoint_modified
-	asyncName2TypeId["breakpoint-deleted"] = Async_breakpoint_deleted
-	asyncName2TypeId["record-started"] = Async_record_started
-	asyncName2TypeId["record-stopped"] = Async_record_stopped
-	asyncName2TypeId["cmd-param-changed"] = Async_cmd_param_changed
-	asyncName2TypeId["memory-changed"] = Async_memory_changed
-	for k, v := range asyncName2TypeId {
-		asyncTypeId2Name[v] = k
-	}
 
-	stopReason2Id["breakpoint-hit"] = Async_stopped_breakpoint_hit
-	stopReason2Id["watchpoint-trigger"] = Async_stopped_watchpoint_trigger
-	stopReason2Id["read-watchpoint-trigger"] = Async_stopped_read_watchpoint_trigger
-	stopReason2Id["access-watchpoint-trigger"] = Async_stopped_access_watchpoint_trigger
-	stopReason2Id["function-finished"] = Async_stopped_function_finished
-	stopReason2Id["location-reached"] = Async_stopped_location_reached
-	stopReason2Id["watchpoint-scope"] = Async_stopped_watchpoint_scope
-	stopReason2Id["end-stepping-range"] = Async_stopped_end_stepping_range
-	stopReason2Id["exited-signalled"] = Async_stopped_exited_signalled
-	stopReason2Id["exited"] = Async_stopped_exited
-	stopReason2Id["exited-normally"] = Async_stopped_exited_normally
-	stopReason2Id["signal-received"] = Async_stopped_signal_received
-	stopReason2Id["solib-event"] = Async_stopped_solib_event
-	stopReason2Id["fork"] = Async_stopped_fork
-	stopReason2Id["vfork"] = Async_stopped_vfork
-	stopReason2Id["syscall-entry"] = Async_stopped_syscall_entry
-	stopReason2Id["exec"] = Async_stopped_exec
-	for k, v := range stopReason2Id {
-		stopId2Reason[v] = k
-	}
+	breakpointTypes.add("breakpoint", BP_breakpoint)
+	breakpointTypes.add("catchpoint", BP_catchpoint)
+
+	resultTypes.add("done", Result_done)
+	resultTypes.add("running", Result_running)
+	resultTypes.add("connected", Result_connected)
+	resultTypes.add("error", Result_error)
+	resultTypes.add("exit", Result_exit)
+
+	asyncTypes.add("running", Async_running)
+	asyncTypes.add("stopped", Async_stopped)
+	asyncTypes.add("thread-group-added", Async_thread_group_added)
+	asyncTypes.add("thread-group-removed", Async_thread_group_removed)
+	asyncTypes.add("thread-group-started", Async_thread_group_started)
+	asyncTypes.add("thread-group-exited", Async_thread_group_exited)
+	asyncTypes.add("thread-created", Async_thread_created)
+	asyncTypes.add("thread-exited", Async_thread_exited)
+	asyncTypes.add("thread-selected", Async_thread_selected)
+	asyncTypes.add("library-loaded", Async_library_loaded)
+	asyncTypes.add("library-unloaded", Async_library_unloaded)
+	asyncTypes.add("traceframe-changed", Async_traceframe_changed)
+	asyncTypes.add("tsv-created", Async_tsv_created)
+	asyncTypes.add("tsv-deleted", Async_tsv_deleted)
+	asyncTypes.add("tsv-modified", Async_tsv_modified)
+	asyncTypes.add("breakpoint-created", Async_breakpoint_created)
+	asyncTypes.add("breakpoint-modified", Async_breakpoint_modified)
+	asyncTypes.add("breakpoint-deleted", Async_breakpoint_deleted)
+	asyncTypes.add("record-started", Async_record_started)
+	asyncTypes.add("record-stopped", Async_record_stopped)
+	asyncTypes.add("cmd-param-changed", Async_cmd_param_changed)
+	asyncTypes.add("memory-changed", Async_memory_changed)
+
+	stopReasons.add("breakpoint-hit", Async_stopped_breakpoint_hit)
+	stopReasons.add("breakpoint-hit", Async_stopped_breakpoint_hit)
+	stopReasons.add("watchpoint-trigger", Async_stopped_watchpoint_trigger)
+	stopReasons.add("read-watchpoint-trigger", Async_stopped_read_watchpoint_trigger)
+	stopReasons.add("access-watchpoint-trigger", Async_stopped_access_watchpoint_trigger)
+	stopReasons.add("function-finished", Async_stopped_function_finished)
+	stopReasons.add("location-reached", Async_stopped_location_reached)
+	stopReasons.add("watchpoint-scope", Async_stopped_watchpoint_scope)
+	stopReasons.add("end-stepping-range", Async_stopped_end_stepping_range)
+	stopReasons.add("exited-signalled", Async_stopped_exited_signalled)
+	stopReasons.add("exited", Async_stopped_exited)
+	stopReasons.add("exited-normally", Async_stopped_exited_normally)
+	stopReasons.add("signal-received", Async_stopped_signal_received)
+	stopReasons.add("solib-event", Async_stopped_solib_event)
+	stopReasons.add("fork", Async_stopped_fork)
+	stopReasons.add("vfork", Async_stopped_vfork)
+	stopReasons.add("syscall-entry", Async_stopped_syscall_entry)
+	stopReasons.add("exec", Async_stopped_exec)
 }
 
 func (rt GDBResultType) String() string {
-	return resultId2Type[rt]
+	return resultTypes.resultId2Type[rt]
 }
 
 func (sr GDBStopReason) String() string {
-	return stopId2Reason[sr]
+	return stopReasons.stopId2Reason[sr]
 }
 
 func (at GDBAsyncType) String() string {
-	return asyncTypeId2Name[at]
+	return asyncTypes.asyncTypeId2Name[at]
+}
+
+func (bp BreakpointType) String() string {
+	return breakpointTypes.breakId2Name[bp]
+}
+
+func (bp BreakpointDispositionType) String() string {
+	return breakpointDispositionTypes.breakId2Name[bp]
 }
 
 type GDBEvent struct {
@@ -329,9 +444,36 @@ type GDBEvent struct {
 	TsvInitial       string
 	CmdParam         string
 	CmdValue         string
-	MemoryAddress    int64
-	MemoryLen        int64
+	MemoryAddress    int
+	MemoryLen        int
 	MemoryTypeCode   bool
+	BreakpointNumber string
+}
+
+type Breakpoint struct {
+	Number           string
+	Type             BreakpointType
+	Disposition      BreakpointDispositionType
+	Enabled          bool
+	Address          string
+	Function         string
+	Filename         string
+	Fullname         string
+	Line             int
+	At               string
+	Pending          string
+	Thread           string
+	Condition        string
+	Ignore           int
+	Enable           int
+	Mask             string
+	Pass             int
+	OriginalLocation string
+	Times            int
+	Installed        bool
+	// static-tracepoint-marker-string-id
+	// evaluated-by ?
+	// catch-type ?
 }
 
 // A running debugger
@@ -342,10 +484,6 @@ type GDB struct {
 	stdin    io.WriteCloser
 	commands chan gdb_command
 	result   chan gdb_response
-	console  chan gdb_response
-	async    chan gdb_response
-	target   chan gdb_response
-	log      chan gdb_response
 }
 
 func NewGDB(gdbpath string, executable string, params []string, env []string) (*GDB, error) {
@@ -353,10 +491,6 @@ func NewGDB(gdbpath string, executable string, params []string, env []string) (*
 	gdb.Event = make(chan GDBEvent)
 	gdb.commands = make(chan gdb_command)
 	gdb.result = make(chan gdb_response)
-	gdb.console = make(chan gdb_response)
-	gdb.async = make(chan gdb_response)
-	gdb.target = make(chan gdb_response)
-	gdb.log = make(chan gdb_response)
 	gdbargs := []string{"-q", "-i", "mi"}
 	gdbargs = append(gdbargs, executable)
 	cmd := exec.Command(gdbpath, gdbargs...)
@@ -391,24 +525,25 @@ func NewGDB(gdbpath string, executable string, params []string, env []string) (*
 				open_commands[c.token] = &c
 			case r := <-gdb.result:
 				//log.Printf("received result '%+v'", r)
-				waiting_cmd, ok := open_commands[r.Token()]
-				if ok {
-					waiting_cmd.result <- r
-				}
-			case r := <-gdb.console:
-				log.Printf("CONSOLE: %+v", r)
-			case r := <-gdb.log:
-				log.Printf("LOG: %+v", r)
-			case r := <-gdb.target:
-				log.Printf("TARGET: %+v", r)
-			case r := <-gdb.async:
-				ev, err := createAsync(r.(*gdb_async))
-				if err != nil {
-					log.Printf("Async Event Error: %s", err)
-				} else {
-					go func() {
-						gdb.Event <- *ev
-					}()
+				switch r.(type) {
+				case *gdb_result:
+					waiting_cmd, ok := open_commands[r.Token()]
+					if ok {
+						waiting_cmd.result <- r
+					}
+				case *gdb_console_output:
+					log.Printf("CONSOLE: %+v", r)
+				case *gdb_log_output:
+					log.Printf("LOG: %+v", r)
+				case *gdb_async:
+					ev, err := createAsync(r.(*gdb_async))
+					if err != nil {
+						log.Printf("Async Event Error: %s", err)
+					} else {
+						go func() {
+							gdb.Event <- *ev
+						}()
+					}
 				}
 			}
 		}
@@ -432,18 +567,7 @@ func (gdb *GDB) parse_gdb_output() {
 				if rt.Match(sline) {
 					found = true
 					rsp := rt.Create(sline)
-					switch rsp.(type) {
-					case *gdb_result:
-						gdb.result <- rsp
-					case *gdb_async:
-						gdb.async <- rsp
-					case *gdb_console_output:
-						gdb.console <- rsp
-					case *gdb_log_output:
-						gdb.log <- rsp
-					case *gdb_target_output:
-						gdb.target <- rsp
-					}
+					gdb.result <- rsp
 				}
 			}
 			if !found {
@@ -475,7 +599,7 @@ func splitKVList(kvlist string) map[string]string {
 }
 
 func asyncTypeFromString(tp string) GDBAsyncType {
-	t, ok := asyncName2TypeId[tp]
+	t, ok := AsyncTypeWithName(tp)
 	if !ok {
 		return Async_unknown
 	}
@@ -485,82 +609,84 @@ func asyncTypeFromString(tp string) GDBAsyncType {
 func createAsync(res *gdb_async) (*GDBEvent, error) {
 	var result GDBEvent
 	toks := strings.SplitN(res.Line(), ",", 2)
-	switch asyncTypeFromString(toks[0]) {
+	result.Type = asyncTypeFromString(toks[0])
+	sub := []byte(res.Line())[len(result.Type.String())+1:]
+	params := splitKVList(string(sub))
+	switch result.Type {
 	case Async_running:
 		result.ThreadId = async_running_line.ReplaceAllString(res.Line(), "$1")
-		result.Type = Async_running
 		return &result, nil
 	case Async_stopped:
-		sub := []byte(res.Line())[len(asyncTypeId2Name[Async_stopped])+1:]
-		params := splitKVList(string(sub))
 		result.ThreadId, _ = params["thread-id"]
 		result.StoppedThreads, _ = params["stopped-threads"]
 		result.StopeCore, _ = params["core"]
 		reason, _ := params["reason"]
-		sr, ok := stopReason2Id[reason]
+		sr, ok := StopReasonWithName(reason)
 		if !ok {
 			log.Printf("Error: unknown stopreaseon: %s\n", reason)
 		} else {
 			result.StopReason = sr
 		}
-		result.Type = Async_stopped
 		return &result, nil
 	case Async_thread_group_started:
-		sub := []byte(res.Line())[len(asyncTypeId2Name[Async_thread_group_started])+1:]
-		params := splitKVList(string(sub))
-		result.Type = Async_thread_group_started
 		result.ThreadGroupid, _ = params["id"]
-		_, err := fmt.Sscanf(params["pid"], "%d", &result.Pid)
-		return &result, err
+		fmt.Sscanf(params["pid"], "%d", &result.Pid)
 	case Async_thread_group_exited:
-		sub := []byte(res.Line())[len(asyncTypeId2Name[Async_thread_group_exited])+1:]
-		params := splitKVList(string(sub))
-		result.Type = Async_thread_group_exited
 		result.ThreadGroupid, _ = params["id"]
-		_, err := fmt.Sscanf(params["exit-code"], "%d", &result.ExitCode)
-		return &result, err
-	case Async_thread_created:
-		sub := []byte(res.Line())[len(asyncTypeId2Name[Async_thread_created])+1:]
-		params := splitKVList(string(sub))
-		result.Type = Async_thread_created
+		fmt.Sscanf(params["exit-code"], "%d", &result.ExitCode)
+	case Async_thread_exited, Async_thread_created, Async_thread_selected:
 		result.ThreadId, _ = params["id"]
 		result.ThreadGroupid, _ = params["gid"]
-		return &result, nil
-	case Async_thread_exited:
-		sub := []byte(res.Line())[len(asyncTypeId2Name[Async_thread_exited])+1:]
-		params := splitKVList(string(sub))
-		result.Type = Async_thread_exited
-		result.ThreadId, _ = params["id"]
-		result.ThreadGroupid, _ = params["gid"]
-		return &result, nil
+	case Async_thread_group_added, Async_thread_group_removed:
+		result.ThreadGroupid, _ = params["id"]
+	case Async_library_loaded, Async_library_unloaded:
+		break
+	case Async_traceframe_changed:
+		fmt.Sscanf(params["num"], "%d", &result.TraceFrameNumber)
+		fmt.Sscanf(params["tracepoint"], "%d", &result.TracePointNumber)
+	case Async_tsv_created, Async_tsv_deleted, Async_tsv_modified:
+		result.TsvName, _ = params["name"]
+		result.TsvInitial, _ = params["initial"]
+		result.TsvValue, _ = params["current"]
+	case Async_record_started, Async_record_stopped:
+		result.ThreadGroupid, _ = params["thread-group"]
+	case Async_cmd_param_changed:
+		result.CmdParam, _ = params["param"]
+		result.CmdValue, _ = params["value"]
+	case Async_memory_changed:
+		result.ThreadGroupid, _ = params["thread-group"]
+		fmt.Sscanf(params["addr"], "%d", result.MemoryAddress)
+		fmt.Sscanf(params["len"], "%d", result.MemoryLen)
+		_, result.MemoryTypeCode = params["type"]
 	default:
 		return nil, fmt.Errorf("unknown async message: %s", res.Line())
 	}
+	return &result, nil
 }
 
 func createResult(res *gdb_result) (*GDBResult, error) {
 	var result GDBResult
-	if strings.HasPrefix(res.Line(), resultId2Type[Result_done]) {
+	if strings.HasPrefix(res.Line(), Result_done.String()) {
 		parts := strings.SplitN(res.Line(), ",", 2)
 		if len(parts) > 1 {
 			result.Results = parts[1]
 		}
 		result.Type = Result_done
 		return &result, nil
-	} else if strings.HasPrefix(res.Line(), resultId2Type[Result_running]) {
+	} else if strings.HasPrefix(res.Line(), string(Result_running)) {
 		result.Type = Result_running
 		return &result, nil
-	} else if strings.HasPrefix(res.Line(), resultId2Type[Result_connected]) {
+	} else if strings.HasPrefix(res.Line(), string(Result_connected)) {
 		result.Type = Result_connected
 		return &result, nil
-	} else if strings.HasPrefix(res.Line(), resultId2Type[Result_error]) {
+	} else if strings.HasPrefix(res.Line(), string(Result_error)) {
 		parts := strings.SplitN(res.Line(), ",", 2)
 		if len(parts) > 1 {
 			result.ErrorMessage = parts[1]
 		}
 		result.Type = Result_error
 		return &result, nil
-	} else if strings.HasPrefix(res.Line(), resultId2Type[Result_exit]) {
+	} else if strings.HasPrefix(res.Line(), string(Result_exit)) {
 		result.Type = Result_exit
 		return &result, nil
 	}
