@@ -75,30 +75,14 @@ func parseBreakpointInfo(info string) (*Breakpoint, error) {
 
 func (gdb *GDB) Break_insert(location string, istemp bool, ishw bool, createpending bool, disabled bool, tracepoint bool, condition *string, ignorecount *int, threadid *int) (*Breakpoint, error) {
 	c := newCommand("break-insert").add_param(location)
-	if istemp {
-		c.add_option("-t")
-	}
-	if ishw {
-		c.add_option("-h")
-	}
-	if createpending {
-		c.add_option("-f")
-	}
-	if disabled {
-		c.add_option("-d")
-	}
-	if tracepoint {
-		c.add_option("-a")
-	}
-	if condition != nil {
-		c.add_optionvalue("-c", *condition)
-	}
-	if ignorecount != nil {
-		c.add_optionvalue("-i", fmt.Sprintf("%d", *ignorecount))
-	}
-	if threadid != nil {
-		c.add_optionvalue("-p", fmt.Sprintf("%d", *threadid))
-	}
+	c.add_option_when(istemp, "-t")
+	c.add_option_when(ishw, "-h")
+	c.add_option_when(createpending, "-f")
+	c.add_option_when(disabled, "-d")
+	c.add_option_when(tracepoint, "-a")
+	c.add_option_stringvalue("-c", condition)
+	c.add_option_intvalue("-i", ignorecount)
+	c.add_option_intvalue("-p", threadid)
 	res, err := gdb.send(c)
 	if err != nil {
 		return nil, err
@@ -107,7 +91,7 @@ func (gdb *GDB) Break_insert(location string, istemp bool, ishw bool, createpend
 		return nil, fmt.Errorf("breakpoint insertion was not successful:%s", res.Results)
 	}
 	if strings.HasPrefix(res.Results, "bkpt=") {
-		ln := string([]byte(res.Results)[len("bkpt="):])
+		ln := cutoff(res.Results, "bkpt=", false)
 		return parseBreakpointInfo(ln)
 	}
 	return nil, fmt.Errorf("breakpoint info should start with 'bkpt=', but has value '%s'", res.Results)
@@ -167,8 +151,57 @@ func (gdb *GDB) Break_info(number string) (*Breakpoint, error) {
 	breakinfo := breakpoint_info.FindAllString(r.Results, 1)
 	if len(breakinfo) > 0 {
 		binfo := breakinfo[0]
-		parseblock := string([]byte(binfo)[len("bkpt="):])
+		parseblock := cutoff(binfo, "bkpt=", false)
 		return parseBreakpointInfo(parseblock)
 	}
 	return nil, nil
+}
+
+func (gdb *GDB) Break_list() (*[]Breakpoint, error) {
+	var result []Breakpoint
+	c := newCommand("break-list")
+	r, e := gdb.send(c)
+	if e != nil {
+		return nil, e
+	}
+	breakinfo := breakpoint_info.FindAllString(r.Results, -1)
+	for _, bi := range breakinfo {
+		parseblock := cutoff(bi, "bkpt=", false)
+		bp, err := parseBreakpointInfo(parseblock)
+		if err != nil {
+			return &result, err
+		}
+		result = append(result, *bp)
+	}
+
+	return &result, nil
+}
+
+func (gdb *GDB) Break_passcount(number string, count int) (*GDBResult, error) {
+	c := newCommand("break-passcount").add_param(number).add_param(fmt.Sprintf("%d", count))
+	return gdb.send(c)
+}
+
+func (gdb *GDB) Break_watch(expr string, read bool, write bool) (*GDBResult, error) {
+	if !(read || write) {
+		return nil, nil
+	}
+	option := ""
+	if read && write {
+		option = "-a"
+	} else if read {
+		option = "-r"
+	}
+	c := newCommand("break-watch").add_option(option)
+	return gdb.send(c)
+}
+
+func (gdb *GDB) Catch_load(reg string, temp bool, disabled bool) (*GDBResult, error) {
+	c := newCommand("catch-load").add_option_when(temp, "-t").add_option_when(disabled, "-d").add_param(reg)
+	return gdb.send(c)
+}
+
+func (gdb *GDB) Catch_unload(reg string, temp bool, disabled bool) (*GDBResult, error) {
+	c := newCommand("catch-unload").add_option_when(temp, "-t").add_option_when(disabled, "-d").add_param(reg)
+	return gdb.send(c)
 }

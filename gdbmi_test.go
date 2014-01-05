@@ -9,20 +9,67 @@ func dummyTokenGenerator() int64 {
 	return 1
 }
 
-func Test_NewGDB(t *testing.T) {
+func dummyStart(gdb *GDB, gdbpath string, gdbparms []string, env []string) error {
+	return nil
+}
+
+func createSender(r *GDBResult, e error) func(cmd *gdb_command) (*GDBResult, error) {
+	return func(cmd *gdb_command) (*GDBResult, error) {
+		return r, e
+	}
+}
+
+func TestEnvironment(t *testing.T) {
+	gdb := NewGDB("unused", "nopath")
+	gdb.start = dummyStart
+	// testfunc for environment-path
+	ep := func() (string, error) {
+		return gdb.Environment_path(false, "")
+	}
+
+	// testfunc for environment-directory
+	ed := func() (string, error) {
+		return gdb.Environment_directory(false, "")
+	}
+
+	pwd := func() (string, error) {
+		return gdb.Environment_pwd()
+	}
+
+	testdata := []struct {
+		result   string
+		expected string
+		f        func() (string, error)
+	}{
+		{result: "path=\"/a/b/c\"", expected: "/a/b/c", f: ep},
+		{result: "source-path=\"/a/b/c\"", expected: "/a/b/c", f: ed},
+		{result: "cwd=\"/a/b/c\"", expected: "/a/b/c", f: pwd},
+	}
+	for _, td := range testdata {
+		res1 := GDBResult{Type: Result_done, Results: td.result, ErrorMessage: ""}
+		gdb.send = createSender(&res1, nil)
+		envpath, _ := td.f()
+		if !equals(envpath, td.expected) {
+			t.Errorf("result has wrong value: '%s'", envpath)
+			t.Fail()
+		}
+	}
+}
+
+func TestNewGDB(t *testing.T) {
 	tokenGenerator = dummyTokenGenerator
-	gdb, err := NewGDB("gdb", "/home/usc/workspaces/gotest/bin/usc2", []string{}, []string{})
+	gdb := NewGDB("gdb", "/home/usc/workspaces/gotest/bin/usc2")
+	err := gdb.Start()
 	if err != nil {
 		t.Fatalf("Failed starting simple process: %s", err)
 	}
-	bp, err := gdb.Break_insert("main.go:11", false, false, false, false, false, nil, nil, nil)
-	//bp2,  _ : gdb.Break_insert("main.go:10", false, false, false, false, false, nil, nil, nil)
+	//_, err = gdb.Break_insert("main.go:11", false, false, false, false, false, nil, nil, nil)
+	gdb.Break_insert("main.go:15", false, false, false, false, false, nil, nil, nil)
 	if err != nil {
 		log.Printf("could not insert breakpoint: %s", err)
 	} else {
-		log.Printf("bp=%+v\n", bp)
-		x, _ := gdb.Break_info(bp.Number)
-		log.Printf("-->TABLE: %+v", x)
+		x, _ := gdb.Break_list()
+		log.Printf("Breakpoints: %+v", x)
 	}
 	/*r, err := gdb.Break_after(bp.Number, 0)
 	if err != nil {
@@ -51,6 +98,8 @@ func Test_NewGDB(t *testing.T) {
 				log.Printf("--> %+v:%s\n", sf, e)
 				s, e := gdb.Stack_list_locals(ListType_all_values)
 				log.Printf("--> %s:%s\n", s, e)
+				gs, e := gdb.Stack_list_arguments(ListType_all_values, nil, nil)
+				log.Printf("--> %+v:%s\n", gs, e)
 			}
 		}
 	}

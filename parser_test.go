@@ -2,7 +2,6 @@ package gdbmi
 
 import (
 	"fmt"
-	_ "testing"
 )
 
 var (

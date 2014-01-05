@@ -50,6 +50,16 @@ func mapValueAsString(m map[string]interface{}, key string, def string) string {
 	return def
 }
 
+func cutoff(line string, prefix string, removeQuotes bool) string {
+	start := len(prefix)
+	end := len(line)
+	if removeQuotes {
+		start += 1
+		end -= 1
+	}
+	return string([]byte(line)[start:end])
+}
+
 var (
 	_gdb_delim                        = []byte("(gdb)")
 	tokenGenerator tokenGeneratorType = timetokenGenerator
@@ -167,13 +177,27 @@ func (c *gdb_command) add_param(p string) *gdb_command {
 	return c
 }
 
-func (c *gdb_command) add_optionvalue(opt string, optparam string) *gdb_command {
-	c.options = append(c.options, fmt.Sprintf("-%s %s", opt, optparam))
+func (c *gdb_command) add_option_stringvalue(opt string, optparam *string) *gdb_command {
+	if optparam != nil {
+		c.options = append(c.options, fmt.Sprintf("-%s %s", opt, *optparam))
+	}
+	return c
+}
+func (c *gdb_command) add_option_intvalue(opt string, optparam *int) *gdb_command {
+	if optparam != nil {
+		c.options = append(c.options, fmt.Sprintf("-%s %d", opt, *optparam))
+	}
 	return c
 }
 
 func (c *gdb_command) add_option(opt string) *gdb_command {
 	c.options = append(c.options, fmt.Sprintf("-%s", opt))
+	return c
+}
+func (c *gdb_command) add_option_when(flg bool, opt string) *gdb_command {
+	if flg {
+		return c.add_option(opt)
+	}
 	return c
 }
 
@@ -476,36 +500,60 @@ type GDB struct {
 	stdin    io.WriteCloser
 	commands chan gdb_command
 	result   chan gdb_response
+	send     func(cmd *gdb_command) (*GDBResult, error)
+	start    func(gdb *GDB, gdbpath string, gdbparms []string, env []string) error
+
+	gdbpath     string
+	executable  string
+	environment []string
 }
 
-func NewGDB(gdbpath string, executable string, params []string, env []string) (*GDB, error) {
+func NewGDB(gdbpath string, executable string, env ...string) *GDB {
 	gdb := new(GDB)
 	gdb.Event = make(chan GDBEvent)
 	gdb.commands = make(chan gdb_command)
 	gdb.result = make(chan gdb_response)
+	gdb.send = gdb.gdbsend
+	gdb.start = startupGDB
+	gdb.gdbpath = gdbpath
+	gdb.executable = executable
+	gdb.environment = env
+
+	return gdb
+}
+func (gdb *GDB) Start() error {
 	gdbargs := []string{"-q", "-i", "mi"}
-	gdbargs = append(gdbargs, executable)
+	gdbargs = append(gdbargs, gdb.executable)
+
+	if err := gdb.start(gdb, gdb.gdbpath, gdbargs, gdb.environment); err != nil {
+		return err
+	}
+	return nil
+}
+
+func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error {
 	cmd := exec.Command(gdbpath, gdbargs...)
+	cmd.Env = env
 	pipe, err := cmd.StdoutPipe()
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 	gdb.stdout = pipe
 	go gdb.parse_gdb_output()
 
 	pipe, err = cmd.StderrPipe()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	gdb.stderr = pipe
 	ipipe, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	gdb.stdin = ipipe
 	if err := cmd.Start(); err != nil {
-		return nil, err
+		return err
 	}
 	go func() {
 		open_commands := make(map[int64]*gdb_command)
@@ -540,7 +588,7 @@ func NewGDB(gdbpath string, executable string, params []string, env []string) (*
 			}
 		}
 	}()
-	return gdb, nil
+	return nil
 }
 
 func (gdb *GDB) parse_gdb_output() {
@@ -576,7 +624,7 @@ func (gdb *GDB) send_to_gdb(cmd *gdb_command) {
 	fmt.Fprintln(gdb.stdin, cmd.dump_mi())
 }
 
-func (gdb *GDB) send(cmd *gdb_command) (*GDBResult, error) {
+func (gdb *GDB) gdbsend(cmd *gdb_command) (*GDBResult, error) {
 	gdb.commands <- *cmd
 	rsp := <-cmd.result
 	result, err := createResult(rsp.(*gdb_result))
@@ -695,6 +743,41 @@ func createResult(res *gdb_result) (*GDBResult, error) {
 	return nil, fmt.Errorf("unknown result indication '%s'", res.Line())
 }
 
+func (gdb *GDB) Exec_arguments(args ...string) (*GDBResult, error) {
+	c := newCommand("exec-arguments")
+	for _, a := range args {
+		c.add_param(a)
+	}
+	return gdb.send(c)
+}
+
+func (gdb *GDB) Environment_cd(dir string) (*GDBResult, error) {
+	c := newCommand("environment-cd").add_param(dir)
+	return gdb.send(c)
+}
+
+func (gdb *GDB) Environment_directory(reset bool, dirs ...string) (string, error) {
+	return gdb.environment_path_query("environment-directory", "source-path=", reset, dirs...)
+}
+func (gdb *GDB) Environment_path(reset bool, dirs ...string) (string, error) {
+	return gdb.environment_path_query("environment-path", "path=", reset, dirs...)
+}
+func (gdb *GDB) Environment_pwd() (string, error) {
+	return gdb.environment_path_query("environment-pwd", "cwd=", false, []string{}...)
+}
+func (gdb *GDB) environment_path_query(gfunc string, prefix string, reset bool, dirs ...string) (string, error) {
+	c := newCommand(gfunc).add_option_when(reset, "-r")
+	for _, d := range dirs {
+		c.add_param(fmt.Sprintf("\"%s\"", d))
+	}
+	res, err := gdb.send(c)
+	if err != nil {
+		return "", err
+	}
+	sourcep := cutoff(res.Results, prefix, true)
+	return sourcep, nil
+}
+
 func (gdb *GDB) Exec_next() {
 	c := newCommand("exec-next")
 	gdb.send(c)
@@ -714,7 +797,7 @@ func (gdb *GDB) Exec_run(all bool, threadgroup *int) (*GDBResult, error) {
 		c.add_option("--all")
 	}
 	if threadgroup != nil {
-		c.add_optionvalue("--thread-group", fmt.Sprintf("%d", *threadgroup))
+		c.add_option_intvalue("--thread-group", threadgroup)
 	}
 	return gdb.send(c)
 }
