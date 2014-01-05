@@ -14,16 +14,7 @@ func parseStructure(input string) gdbStruct {
 	var s scanner.Scanner
 
 	s.Init(strings.NewReader(input))
-	s.Scan() // eat first {
-	return parseStruct(&s)
-	/*
-		tok := s.Scan()
-		for tok != scanner.EOF {
-			fmt.Printf("token: %+v\n", s.TokenText())
-			tok = s.Scan()
-		}
-
-		return nil, nil*/
+	return parseValue(&s).(gdbStruct)
 }
 
 func parseStruct(s *scanner.Scanner) gdbStruct {
