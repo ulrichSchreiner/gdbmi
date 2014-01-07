@@ -563,7 +563,7 @@ func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error 
 				gdb.send_to_gdb(&c)
 				open_commands[c.token] = &c
 			case r := <-gdb.result:
-				switch r.(type) {
+				switch rt := r.(type) {
 				case *gdb_result:
 					waiting_cmd, ok := open_commands[r.Token()]
 					if ok {
@@ -576,7 +576,7 @@ func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error 
 					fmt.Printf(" LOG ---> %s\n", r.Line())
 					//log.Printf("LOG: %+v", r)
 				case *gdb_async:
-					ev, err := createAsync(r.(*gdb_async))
+					ev, err := createAsync(rt)
 					if err != nil {
 						//log.Printf("Async Event Error: %s", err)
 					} else {

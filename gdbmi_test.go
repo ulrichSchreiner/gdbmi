@@ -1,7 +1,9 @@
 package gdbmi
 
 import (
+	"fmt"
 	"log"
+	"os"
 	"testing"
 )
 
@@ -58,7 +60,11 @@ func TestEnvironment(t *testing.T) {
 
 func TestNewGDB(t *testing.T) {
 	tokenGenerator = dummyTokenGenerator
-	gdb := NewGDB("gdb", "/home/usc/workspaces/gotest/bin/usc2")
+	cwd, e := os.Getwd()
+	if e != nil {
+		t.Fatalf("could not get WorkingDirectory: %s", e)
+	}
+	gdb := NewGDB("gdb", fmt.Sprintf("%s/../../../../bin/cmd", cwd))
 	err := gdb.Start()
 	if err != nil {
 		t.Fatalf("Failed starting simple process: %s", err)
