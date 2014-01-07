@@ -99,6 +99,8 @@ var (
 	}
 
 	async_running_line = regexp.MustCompile("running,thread-id=\"(.*)\"")
+
+	Debugger = NewGDB("gdb")
 )
 
 type tokenGeneratorType func() int64
@@ -503,12 +505,10 @@ type GDB struct {
 	send     func(cmd *gdb_command) (*GDBResult, error)
 	start    func(gdb *GDB, gdbpath string, gdbparms []string, env []string) error
 
-	gdbpath     string
-	executable  string
-	environment []string
+	gdbpath string
 }
 
-func NewGDB(gdbpath string, executable string, env ...string) *GDB {
+func NewGDB(gdbpath string) *GDB {
 	gdb := new(GDB)
 	gdb.Event = make(chan GDBEvent)
 	gdb.commands = make(chan gdb_command)
@@ -516,16 +516,14 @@ func NewGDB(gdbpath string, executable string, env ...string) *GDB {
 	gdb.send = gdb.gdbsend
 	gdb.start = startupGDB
 	gdb.gdbpath = gdbpath
-	gdb.executable = executable
-	gdb.environment = env
 
 	return gdb
 }
-func (gdb *GDB) Start() error {
+func (gdb *GDB) Start(executable string, env ...string) error {
 	gdbargs := []string{"-q", "-i", "mi"}
-	gdbargs = append(gdbargs, gdb.executable)
+	gdbargs = append(gdbargs, executable)
 
-	if err := gdb.start(gdb, gdb.gdbpath, gdbargs, gdb.environment); err != nil {
+	if err := gdb.start(gdb, gdb.gdbpath, gdbargs, env); err != nil {
 		return err
 	}
 	return nil

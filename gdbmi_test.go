@@ -22,7 +22,7 @@ func createSender(r *GDBResult, e error) func(cmd *gdb_command) (*GDBResult, err
 }
 
 func TestEnvironment(t *testing.T) {
-	gdb := NewGDB("unused", "nopath")
+	gdb := NewGDB("unused")
 	gdb.start = dummyStart
 	// testfunc for environment-path
 	ep := func() (string, error) {
@@ -64,8 +64,8 @@ func TestNewGDB(t *testing.T) {
 	if e != nil {
 		t.Fatalf("could not get WorkingDirectory: %s", e)
 	}
-	gdb := NewGDB("gdb", fmt.Sprintf("%s/../../../../bin/cmd", cwd))
-	err := gdb.Start()
+	gdb := Debugger
+	err := gdb.Start(fmt.Sprintf("%s/../../../../bin/cmd", cwd))
 	if err != nil {
 		t.Fatalf("Failed starting simple process: %s", err)
 	}
