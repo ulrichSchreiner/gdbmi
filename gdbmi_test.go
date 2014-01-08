@@ -70,7 +70,7 @@ func TestNewGDB(t *testing.T) {
 		t.Fatalf("Failed starting simple process: %s", err)
 	}
 	//_, err = gdb.Break_insert("main.go:11", false, false, false, false, false, nil, nil, nil)
-	gdb.Break_insert("main.go:15", false, false, false, false, false, nil, nil, nil)
+	//gdb.Break_insert("main.go:15", false, false, false, false, false, nil, nil, nil)
 	if err != nil {
 		log.Printf("could not insert breakpoint: %s", err)
 	} else {
@@ -85,6 +85,11 @@ func TestNewGDB(t *testing.T) {
 	}*/
 	//r, err := gdb.Break_commands(bp.Number, "continue")
 	//log.Printf("break_commands: %+v, %s", r, err)
+	go func() {
+		for ev := range gdb.Target {
+			log.Printf("CONSOLE: %s", ev.Line)
+		}
+	}()
 	res, err := gdb.Exec_run(false, nil)
 	if err != nil {
 		log.Printf("exec error: %+s", err)

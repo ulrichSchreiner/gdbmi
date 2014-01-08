@@ -494,9 +494,14 @@ type GDBEvent struct {
 	BreakpointNumber string        `json:"breakpointNumber"`
 }
 
+type GDBTargetConsoleEvent struct {
+	Line string `json:"line"`
+}
+
 // A running debugger
 type GDB struct {
-	Event chan GDBEvent
+	Event  chan GDBEvent
+	Target chan GDBTargetConsoleEvent
 
 	stdout   io.ReadCloser
 	stderr   io.ReadCloser
@@ -512,6 +517,8 @@ type GDB struct {
 func NewGDB(gdbpath string) *GDB {
 	gdb := new(GDB)
 	gdb.Event = make(chan GDBEvent)
+	gdb.Target = make(chan GDBTargetConsoleEvent)
+
 	gdb.commands = make(chan gdb_command)
 	gdb.result = make(chan gdb_response)
 	gdb.send = gdb.gdbsend
@@ -569,8 +576,12 @@ func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error 
 						waiting_cmd.result <- r
 					}
 				case *gdb_console_output:
-					fmt.Printf(" CONSOLE ---> %s\n", r.Line())
-					//log.Printf("CONSOLE: %+v", r)
+				case *gdb_target_output:
+					ev := new(GDBTargetConsoleEvent)
+					ev.Line = r.Line()
+					go func() {
+						gdb.Target <- *ev
+					}()
 				case *gdb_log_output:
 					fmt.Printf(" LOG ---> %s\n", r.Line())
 					//log.Printf("LOG: %+v", r)
