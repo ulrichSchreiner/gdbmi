@@ -11,6 +11,6 @@ func main() {
 	fmt.Printf("%s\n", s3)
 }
 
-func sub(s1, s2 string) string {
+func sub(s2, s1 string) string {
 	return fmt.Sprintf("%s - %s", s1, s2)
 }
