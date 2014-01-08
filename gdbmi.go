@@ -152,7 +152,7 @@ func (r *gdb_response_type) Fill(fields map[string]string) error {
 	if ok && len(token) > 0 {
 		tok, perr := strconv.ParseInt(token, 10, 64)
 		if perr != nil {
-			return fmt.Errorf("cannot parse token %s", tok)
+			return fmt.Errorf("cannot parse token %s", token)
 		} else {
 			r.token = tok
 		}
@@ -221,9 +221,9 @@ const (
 )
 
 type GDBResult struct {
-	Type         GDBResultType
-	Results      string
-	ErrorMessage string
+	Type         GDBResultType `json:"type"`
+	Results      string        `json:"results"`
+	ErrorMessage string        `json:"errorMessage"`
 }
 
 type GDBAsyncType int
@@ -473,30 +473,31 @@ func (bp BreakpointDispositionType) String() string {
 // the Type the other fields are filled or not. Look at the GDB/MI documentation to find more information
 // about the fields.
 type GDBEvent struct {
-	Type             GDBAsyncType
-	StopReason       GDBStopReason
-	ThreadId         string
-	ThreadGroupid    string
-	StoppedThreads   string
-	StopCore         string
-	Pid              int
-	ExitCode         int
-	TraceFrameNumber int
-	TracePointNumber int
-	TsvName          string
-	TsvValue         string
-	TsvInitial       string
-	CmdParam         string
-	CmdValue         string
-	MemoryAddress    int
-	MemoryLen        int
-	MemoryTypeCode   bool
-	BreakpointNumber string
+	Type             GDBAsyncType  `json:"type"`
+	StopReason       GDBStopReason `json:"stopReason"`
+	ThreadId         string        `json:"threadId"`
+	ThreadGroupid    string        `json:"threadGroupId"`
+	StoppedThreads   string        `json:"stoppendThreads"`
+	StopCore         string        `json:"stopCopre"`
+	Pid              int           `json:"pid"`
+	ExitCode         int           `json:"exitCode"`
+	TraceFrameNumber int           `json:"traceFrameNumber"`
+	TracePointNumber int           `json:"tracePointNumber"`
+	TsvName          string        `json:"tsvName"`
+	TsvValue         string        `json:"tsvValue"`
+	TsvInitial       string        `json:"tsvInitial"`
+	CmdParam         string        `json:"cmdParam"`
+	CmdValue         string        `json:"cmdValue"`
+	MemoryAddress    int           `json:"memoryAddress"`
+	MemoryLen        int           `json:"memoryLen"`
+	MemoryTypeCode   bool          `json:"memoryTypeCode"`
+	BreakpointNumber string        `json:"breakpointNumber"`
 }
 
 // A running debugger
 type GDB struct {
-	Event    chan GDBEvent
+	Event chan GDBEvent
+
 	stdout   io.ReadCloser
 	stderr   io.ReadCloser
 	stdin    io.WriteCloser
