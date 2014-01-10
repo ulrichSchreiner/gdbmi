@@ -3,6 +3,8 @@ package gdbmi
 import (
 	"fmt"
 	"log"
+	_ "net/http"
+	_ "net/http/pprof"
 	"os"
 	"testing"
 )
@@ -64,7 +66,7 @@ func TestNewGDB(t *testing.T) {
 	if e != nil {
 		t.Fatalf("could not get WorkingDirectory: %s", e)
 	}
-	gdb := Debugger
+	gdb := NewGDB("gdb")
 	err := gdb.Start(fmt.Sprintf("%s/../../../../bin/cmd", cwd))
 	if err != nil {
 		t.Fatalf("Failed starting simple process: %s", err)
@@ -87,7 +89,7 @@ func TestNewGDB(t *testing.T) {
 	//log.Printf("break_commands: %+v, %s", r, err)
 	go func() {
 		for ev := range gdb.Target {
-			log.Printf("CONSOLE: %s", ev.Line)
+			log.Printf("CONSOLE : %s", ev.Line)
 		}
 	}()
 	res, err := gdb.Exec_run(false, nil)
@@ -96,22 +98,27 @@ func TestNewGDB(t *testing.T) {
 	} else {
 		log.Printf("exec result: %+v", res)
 	}
-	for ev := range gdb.Event {
-		log.Printf("received: %+v", ev)
-		if ev.StopReason == Async_stopped_exited ||
-			ev.StopReason == Async_stopped_exited_normally ||
-			ev.StopReason == Async_stopped_exited_signalled {
-			log.Printf("exit received: %+v", ev)
-			break
-		} else {
-			if ev.Type == Async_stopped {
-				sf, e := gdb.Stack_info_frame()
-				log.Printf("--> %+v:%s\n", sf, e)
-				s, e := gdb.Stack_list_locals(ListType_all_values)
-				log.Printf("--> %s:%s\n", s, e)
-				gs, e := gdb.Stack_list_arguments(ListType_all_values, nil, nil)
-				log.Printf("--> %+v:%s\n", gs, e)
+	go func() {
+		for ev := range gdb.Event {
+			log.Printf("received: %+v", ev)
+			if ev.StopReason == Async_stopped_exited ||
+				ev.StopReason == Async_stopped_exited_normally ||
+				ev.StopReason == Async_stopped_exited_signalled {
+				log.Printf("exit received: %+v", ev)
+				gdb.Gdb_exit()
+				gdb.Close()
+				break
+			} else {
+				if ev.Type == Async_stopped {
+					sf, e := gdb.Stack_info_frame()
+					log.Printf("--> %+v:%s\n", sf, e)
+					s, e := gdb.Stack_list_locals(ListType_all_values)
+					log.Printf("--> %s:%s\n", s, e)
+					gs, e := gdb.Stack_list_arguments(ListType_all_values, nil, nil)
+					log.Printf("--> %+v:%s\n", gs, e)
+				}
 			}
 		}
-	}
+	}()
+	//http.ListenAndServe("localhost:6060", nil)
 }

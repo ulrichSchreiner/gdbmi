@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -99,8 +100,6 @@ var (
 	}
 
 	async_running_line = regexp.MustCompile("running,thread-id=\"(.*)\"")
-
-	Debugger = NewGDB("gdb")
 )
 
 type tokenGeneratorType func() int64
@@ -500,9 +499,11 @@ type GDBTargetConsoleEvent struct {
 
 // A running debugger
 type GDB struct {
-	Event  chan GDBEvent
-	Target chan GDBTargetConsoleEvent
+	Event           chan GDBEvent
+	Target          chan GDBTargetConsoleEvent
+	DebuggerProcess *os.Process
 
+	quit     chan bool
 	stdout   io.ReadCloser
 	stderr   io.ReadCloser
 	stdin    io.WriteCloser
@@ -510,8 +511,7 @@ type GDB struct {
 	result   chan gdb_response
 	send     func(cmd *gdb_command) (*GDBResult, error)
 	start    func(gdb *GDB, gdbpath string, gdbparms []string, env []string) error
-
-	gdbpath string
+	gdbpath  string
 }
 
 func NewGDB(gdbpath string) *GDB {
@@ -519,6 +519,7 @@ func NewGDB(gdbpath string) *GDB {
 	gdb.Event = make(chan GDBEvent)
 	gdb.Target = make(chan GDBTargetConsoleEvent)
 
+	gdb.quit = make(chan bool)
 	gdb.commands = make(chan gdb_command)
 	gdb.result = make(chan gdb_response)
 	gdb.send = gdb.gdbsend
@@ -535,6 +536,17 @@ func (gdb *GDB) Start(executable string, env ...string) error {
 		return err
 	}
 	return nil
+}
+
+func (gdb *GDB) Close() {
+	close(gdb.quit)
+
+	/*
+		gdb.stdin.Close()
+		gdb.stdout.Close()
+		gdb.stderr.Close()
+		close(gdb.Event)
+		close(gdb.Target) */
 }
 
 func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error {
@@ -561,14 +573,26 @@ func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error 
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+	gdb.DebuggerProcess = cmd.Process
 	go func() {
 		open_commands := make(map[int64]*gdb_command)
 		for {
 			select {
-			case c := <-gdb.commands:
+			case <-gdb.quit:
+				close(gdb.commands)
+				close(gdb.Target)
+				close(gdb.Event)
+				return
+			case c, ok := <-gdb.commands:
+				if !ok {
+					return
+				}
 				gdb.send_to_gdb(&c)
 				open_commands[c.token] = &c
-			case r := <-gdb.result:
+			case r, ok := <-gdb.result:
+				if !ok {
+					return
+				}
 				switch rt := r.(type) {
 				case *gdb_result:
 					waiting_cmd, ok := open_commands[r.Token()]
@@ -605,7 +629,11 @@ func (gdb *GDB) parse_gdb_output() {
 	buf := bufio.NewReader(gdb.stdout)
 	for {
 		var ln []byte
-		ln, _ = buf.ReadBytes('\n')
+		ln, err := buf.ReadBytes('\n')
+		if err != nil {
+			close(gdb.result)
+			return
+		}
 		ln = bytes.TrimSpace(ln)
 		sline := string(ln)
 		//log.Printf(" ---> %s", sline)
@@ -810,4 +838,8 @@ func (gdb *GDB) Exec_run(all bool, threadgroup *int) (*GDBResult, error) {
 		c.add_option_intvalue("--thread-group", threadgroup)
 	}
 	return gdb.send(c)
+}
+
+func (gdb *GDB) Gdb_exit() {
+	gdb.send(newCommand("gdb-exit"))
 }
