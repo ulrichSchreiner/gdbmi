@@ -8,24 +8,24 @@ import (
 type StackListType int
 
 type StackFrame struct {
-	Level    int
-	Function string
-	Address  string
-	File     string
-	Line     int
-	From     string
-	Fullname string
+	Level    int    `json:"level"`
+	Function string `json:"function"`
+	Address  string `json:"address"`
+	File     string `json:"file"`
+	Line     int    `json:"line"`
+	From     string `json:"from"`
+	Fullname string `json:"fullname"`
 }
 
 type FrameArgument struct {
-	Name  string
-	Type  string
-	Value string
+	Name  string `json:"name"`
+	Type  string `json:"type"`
+	Value string `json:"value"`
 }
 
 type StackFrameArguments struct {
-	Level     int
-	Arguments []FrameArgument
+	Level     int             `json:"level"`
+	Arguments []FrameArgument `json:"arguments"`
 }
 
 const (
@@ -34,9 +34,8 @@ const (
 	ListType_simple_values
 )
 
-func parseStackFrameInfo(info string) (*StackFrame, error) {
+func stackFrameInfo(sinfo gdbStruct) (*StackFrame, error) {
 	var result StackFrame
-	sinfo := parseStructure(info)
 
 	fmt.Sscanf(mapValueAsString(sinfo, "line", "0"), "%d", &result.Line)
 	fmt.Sscanf(mapValueAsString(sinfo, "level", "0"), "%d", &result.Level)
@@ -49,6 +48,23 @@ func parseStackFrameInfo(info string) (*StackFrame, error) {
 	return &result, nil
 }
 
+func parseStackFrameInfo(info string) (*StackFrame, error) {
+	return stackFrameInfo(parseStructure(info))
+}
+
+func frameArguments(args []interface{}) []FrameArgument {
+	var result []FrameArgument
+	for _, sa := range args {
+		fa := new(FrameArgument)
+		samap := sa.(gdbStruct)
+		fa.Name = mapValueAsString(samap, "name", "")
+		fa.Type = mapValueAsString(samap, "type", "")
+		fa.Value = mapValueAsString(samap, "value", "")
+		result = append(result, *fa)
+	}
+	return result
+}
+
 func parseStackFrameArguments(info string) (*[]StackFrameArguments, error) {
 	var result []StackFrameArguments
 	args := parseStructureArray(info)
@@ -58,15 +74,7 @@ func parseStackFrameArguments(info string) (*[]StackFrameArguments, error) {
 		framemap := sfa["frame"]
 		frame := framemap.(gdbStruct)
 		fmt.Sscanf(mapValueAsString(frame, "level", "0"), "%d", &sf.Level)
-		argsmap := frame["args"].([]interface{})
-		for _, sa := range argsmap {
-			fa := new(FrameArgument)
-			samap := sa.(gdbStruct)
-			fa.Name = mapValueAsString(samap, "name", "")
-			fa.Type = mapValueAsString(samap, "type", "")
-			fa.Value = mapValueAsString(samap, "value", "")
-			sf.Arguments = append(sf.Arguments, *fa)
-		}
+		sf.Arguments = frameArguments(frame["args"].([]interface{}))
 		result = append(result, *sf)
 	}
 	return &result, nil

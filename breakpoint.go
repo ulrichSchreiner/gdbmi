@@ -73,6 +73,10 @@ func parseBreakpointInfo(info string) (*Breakpoint, error) {
 	return &result, nil
 }
 
+func (gdb *GDB) Breakpoint(module string, line int) (*Breakpoint, error) {
+	return gdb.Break_insert(fmt.Sprintf("%s:%d", module, line), false, false, false, false, false, nil, nil, nil)
+}
+
 func (gdb *GDB) Break_insert(location string, istemp bool, ishw bool, createpending bool, disabled bool, tracepoint bool, condition *string, ignorecount *int, threadid *int) (*Breakpoint, error) {
 	c := newCommand("break-insert").add_param(location)
 	c.add_option_when(istemp, "-t")

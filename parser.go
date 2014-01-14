@@ -8,6 +8,14 @@ import (
 
 type gdbStruct map[string]interface{}
 
+func (s *gdbStruct) get_string(k string, def string) string {
+	v, ok := (*s)[k]
+	if ok {
+		return v.(string)
+	}
+	return def
+}
+
 var assignment []byte = []byte("=")
 
 func parseStructure(input string) gdbStruct {
@@ -16,6 +24,7 @@ func parseStructure(input string) gdbStruct {
 	s.Init(strings.NewReader(input))
 	return parseValue(&s).(gdbStruct)
 }
+
 func parseStructureArray(input string) []interface{} {
 	var s scanner.Scanner
 

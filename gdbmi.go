@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/exec"
 	"regexp"
@@ -472,25 +473,27 @@ func (bp BreakpointDispositionType) String() string {
 // the Type the other fields are filled or not. Look at the GDB/MI documentation to find more information
 // about the fields.
 type GDBEvent struct {
-	Type             GDBAsyncType  `json:"type"`
-	StopReason       GDBStopReason `json:"stopReason"`
-	ThreadId         string        `json:"threadId"`
-	ThreadGroupid    string        `json:"threadGroupId"`
-	StoppedThreads   string        `json:"stoppendThreads"`
-	StopCore         string        `json:"stopCopre"`
-	Pid              int           `json:"pid"`
-	ExitCode         int           `json:"exitCode"`
-	TraceFrameNumber int           `json:"traceFrameNumber"`
-	TracePointNumber int           `json:"tracePointNumber"`
-	TsvName          string        `json:"tsvName"`
-	TsvValue         string        `json:"tsvValue"`
-	TsvInitial       string        `json:"tsvInitial"`
-	CmdParam         string        `json:"cmdParam"`
-	CmdValue         string        `json:"cmdValue"`
-	MemoryAddress    int           `json:"memoryAddress"`
-	MemoryLen        int           `json:"memoryLen"`
-	MemoryTypeCode   bool          `json:"memoryTypeCode"`
-	BreakpointNumber string        `json:"breakpointNumber"`
+	Type                  GDBAsyncType     `json:"type"`
+	StopReason            GDBStopReason    `json:"stopReason"`
+	ThreadId              string           `json:"threadId"`
+	ThreadGroupid         string           `json:"threadGroupId"`
+	StoppedThreads        string           `json:"stoppendThreads"`
+	StopCore              string           `json:"stopCopre"`
+	Pid                   int              `json:"pid"`
+	ExitCode              int              `json:"exitCode"`
+	TraceFrameNumber      int              `json:"traceFrameNumber"`
+	TracePointNumber      int              `json:"tracePointNumber"`
+	TsvName               string           `json:"tsvName"`
+	TsvValue              string           `json:"tsvValue"`
+	TsvInitial            string           `json:"tsvInitial"`
+	CmdParam              string           `json:"cmdParam"`
+	CmdValue              string           `json:"cmdValue"`
+	MemoryAddress         int              `json:"memoryAddress"`
+	MemoryLen             int              `json:"memoryLen"`
+	MemoryTypeCode        bool             `json:"memoryTypeCode"`
+	BreakpointNumber      string           `json:"breakpointNumber"`
+	CurrentStackFrame     *StackFrame      `json:"currentStackFrame"`
+	CurrentStackArguments *[]FrameArgument `json:"currentStackArguments"`
 }
 
 type GDBTargetConsoleEvent struct {
@@ -696,6 +699,7 @@ func asyncTypeFromString(tp string) GDBAsyncType {
 
 func createAsync(res *gdb_async) (*GDBEvent, error) {
 	var result GDBEvent
+	fmt.Printf(" ------> %s\n", res.Line())
 	toks := strings.SplitN(res.Line(), ",", 2)
 	result.Type = asyncTypeFromString(toks[0])
 	sub := []byte(res.Line())[len(result.Type.String())+1:]
@@ -705,10 +709,24 @@ func createAsync(res *gdb_async) (*GDBEvent, error) {
 		result.ThreadId = async_running_line.ReplaceAllString(res.Line(), "$1")
 		return &result, nil
 	case Async_stopped:
-		result.ThreadId, _ = params["thread-id"]
-		result.StoppedThreads, _ = params["stopped-threads"]
-		result.StopCore, _ = params["core"]
-		reason, _ := params["reason"]
+		strct := parseStructure(fmt.Sprintf("{%s}", sub))
+		result.ThreadId = strct.get_string("thread-id", "")
+		result.StoppedThreads = strct.get_string("stopped-threads", "")
+		result.StopCore = strct.get_string("core", "")
+		frame, ok := strct["frame"]
+		if ok {
+			sinfo, err := stackFrameInfo(frame.(gdbStruct))
+			if err == nil {
+				result.CurrentStackFrame = sinfo
+				faargs := frame.(gdbStruct)["args"]
+				fa := frameArguments(faargs.([]interface{}))
+				result.CurrentStackArguments = &fa
+			} else {
+				log.Printf("Error getting stackframeinfo: %v", err)
+			}
+		}
+		fmt.Printf("FRAME INFO %+v", frame)
+		reason := strct.get_string("reason", "")
 		sr, ok := StopReasonWithName(reason)
 		if !ok {
 			return nil, fmt.Errorf("Error: unknown stopreaseon: %s", reason)
@@ -833,6 +851,19 @@ func (gdb *GDB) Exec_run(all bool, threadgroup *int) (*GDBResult, error) {
 	c := newCommand("exec-run")
 	if all {
 		c.add_option("--all")
+	}
+	if threadgroup != nil {
+		c.add_option_intvalue("--thread-group", threadgroup)
+	}
+	return gdb.send(c)
+}
+func (gdb *GDB) Exec_continue(all bool, reverse bool, threadgroup *int) (*GDBResult, error) {
+	c := newCommand("exec-continue")
+	if all {
+		c.add_option("--all")
+	}
+	if reverse {
+		c.add_option("--reverse")
 	}
 	if threadgroup != nil {
 		c.add_option_intvalue("--thread-group", threadgroup)
