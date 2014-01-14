@@ -834,17 +834,32 @@ func (gdb *GDB) environment_path_query(gfunc string, prefix string, reset bool, 
 	return sourcep, nil
 }
 
-func (gdb *GDB) Exec_next() {
-	c := newCommand("exec-next")
-	gdb.send(c)
-}
-
-func (gdb *GDB) Exec_nexti(reverse bool) {
-	c := newCommand("exec-next-instruction")
+func reverse_command(gdb *GDB, cmd string, reverse bool) (*GDBResult, error) {
+	c := newCommand(cmd)
 	if reverse {
 		c.add_option("--reverse")
 	}
-	gdb.send(c)
+	return gdb.send(c)
+}
+
+func (gdb *GDB) Exec_next(reverse bool) (*GDBResult, error) {
+	return reverse_command(gdb, "exec-next", reverse)
+}
+
+func (gdb *GDB) Exec_nexti(reverse bool) (*GDBResult, error) {
+	return reverse_command(gdb, "exec-next-instruction", reverse)
+}
+func (gdb *GDB) Exec_step(reverse bool) (*GDBResult, error) {
+	return reverse_command(gdb, "exec-step", reverse)
+}
+
+func (gdb *GDB) Exec_stepi(reverse bool) (*GDBResult, error) {
+	return reverse_command(gdb, "exec-step-instruction", reverse)
+}
+
+func (gdb *GDB) Exec_return() (*GDBResult, error) {
+	c := newCommand("exec-return")
+	return gdb.send(c)
 }
 
 func (gdb *GDB) Exec_run(all bool, threadgroup *int) (*GDBResult, error) {
