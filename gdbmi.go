@@ -536,14 +536,9 @@ func NewGDB(gdbpath string) *GDB {
 func (gdb *GDB) Start(executable string, env ...string) error {
 	gdbargs := []string{"-q", "--nx", "--nw", "-i", "mi2"}
 	gdbargs = append(gdbargs, executable)
-	// set inferior-tty /dev/ttyb
+
 	if err := gdb.start(gdb, gdb.gdbpath, gdbargs, env); err != nil {
 		return err
-	}
-	targetpty, ptyname, err := pty.Open()
-	if err == nil {
-		gdb.tty = targetpty
-		gdb.Inferior_tty_set(ptyname)
 	}
 	return nil
 }
@@ -572,7 +567,6 @@ func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error 
 	}
 	gdb.stdout = pipe
 	go gdb.parse_gdb_output()
-	go gdb.parse_target_output()
 
 	pipe, err = cmd.StderrPipe()
 	if err != nil {
@@ -588,6 +582,14 @@ func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error 
 		return err
 	}
 	gdb.DebuggerProcess = cmd.Process
+	targetpty, ptyname, err := pty.Open()
+	if err == nil {
+		gdb.tty = targetpty
+		go func() {
+			gdb.Inferior_tty_set(ptyname)
+			gdb.parse_target_output()
+		}()
+	}
 	go func() {
 		open_commands := make(map[int64]*gdb_command)
 		for {
@@ -643,12 +645,10 @@ func (gdb *GDB) parse_target_output() {
 	buf := bufio.NewReader(gdb.tty)
 	for {
 		var ln []byte
-		fmt.Printf(" !!!!!!!!!! -----------> read from traget\n")
 		ln, err := buf.ReadBytes('\n')
 		if err != nil {
 			return
 		}
-		fmt.Printf(" !!!!!!!!!! -----------> read from traget: %s\n", ln)
 		rsp := new(gdb_target_output)
 		rsp.line = string(ln)
 		gdb.result <- rsp
