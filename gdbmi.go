@@ -497,15 +497,13 @@ type GDBEvent struct {
 	CurrentStackArguments *[]FrameArgument `json:"currentStackArguments"`
 }
 
-type GDBTargetConsoleEvent struct {
-	Line string `json:"line"`
-}
-
 // A running debugger
 type GDB struct {
-	Event           chan GDBEvent
-	Target          chan GDBTargetConsoleEvent
-	DebuggerProcess *os.Process
+	Event chan GDBEvent
+	//Target           chan GDBTargetConsoleEvent
+	DebuggerProcess  *os.Process
+	TargetConsoleOut io.Reader
+	TargetConsoleIn  io.Writer
 
 	quit     chan bool
 	stdout   io.ReadCloser
@@ -522,7 +520,7 @@ type GDB struct {
 func NewGDB(gdbpath string) *GDB {
 	gdb := new(GDB)
 	gdb.Event = make(chan GDBEvent)
-	gdb.Target = make(chan GDBTargetConsoleEvent)
+	//gdb.Target = make(chan GDBTargetConsoleEvent)
 
 	gdb.quit = make(chan bool)
 	gdb.commands = make(chan gdb_command)
@@ -587,7 +585,10 @@ func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error 
 		gdb.tty = targetpty
 		go func() {
 			gdb.Inferior_tty_set(ptyname)
-			gdb.parse_target_output()
+			//gdb.parse_target_output()
+
+			gdb.TargetConsoleOut = targetpty
+			gdb.TargetConsoleOut = targetpty
 		}()
 	}
 	go func() {
@@ -596,7 +597,7 @@ func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error 
 			select {
 			case <-gdb.quit:
 				close(gdb.commands)
-				close(gdb.Target)
+				//close(gdb.Target)
 				close(gdb.Event)
 				return
 			case c, ok := <-gdb.commands:
@@ -616,12 +617,6 @@ func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error 
 						waiting_cmd.result <- r
 					}
 				case *gdb_console_output:
-				case *gdb_target_output:
-					ev := new(GDBTargetConsoleEvent)
-					ev.Line = r.Line()
-					go func() {
-						gdb.Target <- *ev
-					}()
 				case *gdb_log_output:
 					fmt.Printf(" LOG ---> %s\n", r.Line())
 					//log.Printf("LOG: %+v", r)
@@ -888,6 +883,10 @@ func (gdb *GDB) Exec_step(reverse bool) (*GDBResult, error) {
 
 func (gdb *GDB) Exec_stepi(reverse bool) (*GDBResult, error) {
 	return reverse_command(gdb, "exec-step-instruction", reverse)
+}
+
+func (gdb *GDB) Exec_finish(reverse bool) (*GDBResult, error) {
+	return reverse_command(gdb, "exec-finish", reverse)
 }
 
 func (gdb *GDB) Exec_return() (*GDBResult, error) {

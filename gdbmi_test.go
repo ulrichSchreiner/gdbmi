@@ -87,11 +87,6 @@ func TestNewGDB(t *testing.T) {
 	}*/
 	//r, err := gdb.Break_commands(bp.Number, "continue")
 	//log.Printf("break_commands: %+v, %s", r, err)
-	go func() {
-		for ev := range gdb.Target {
-			log.Printf("CONSOLE : %s", ev.Line)
-		}
-	}()
 	res, err := gdb.Exec_run(false, nil)
 	if err != nil {
 		log.Printf("exec error: %+s", err)
