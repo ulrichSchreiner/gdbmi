@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/jayschwa/go-pty"
 	"io"
-	"log"
+	_ "log"
 	"os"
 	"os/exec"
 	"regexp"
@@ -177,6 +177,18 @@ func newCommand(cmd string) *gdb_command {
 
 func (c *gdb_command) add_param(p string) *gdb_command {
 	c.parameter = append(c.parameter, p)
+	return c
+}
+func (c *gdb_command) add_existing(p *string) *gdb_command {
+	if p != nil {
+		c.parameter = append(c.parameter, *p)
+	}
+	return c
+}
+func (c *gdb_command) add_existing_int(p *int) *gdb_command {
+	if p != nil {
+		c.parameter = append(c.parameter, fmt.Sprintf("%d", *p))
+	}
 	return c
 }
 
@@ -495,6 +507,8 @@ type GDBEvent struct {
 	BreakpointNumber      string           `json:"breakpointNumber"`
 	CurrentStackFrame     *StackFrame      `json:"currentStackFrame"`
 	CurrentStackArguments *[]FrameArgument `json:"currentStackArguments"`
+	SignalName            string           `json:"signalName"`
+	SignalMeaning         string           `json:"signalMeaning"`
 }
 
 // A running debugger
@@ -618,12 +632,10 @@ func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error 
 					}
 				case *gdb_console_output:
 				case *gdb_log_output:
-					fmt.Printf(" LOG ---> %s\n", r.Line())
-					//log.Printf("LOG: %+v", r)
+					break
 				case *gdb_async:
 					ev, err := createAsync(rt)
 					if err != nil {
-						//log.Printf("Async Event Error: %s", err)
 					} else {
 						go func() {
 							gdb.Event <- *ev
@@ -661,7 +673,6 @@ func (gdb *GDB) parse_gdb_output() {
 		}
 		ln = bytes.TrimSpace(ln)
 		sline := string(ln)
-		//log.Printf(" ---> %s", sline)
 		if gdb_delim.Match(sline) {
 			continue
 		} else {
@@ -721,7 +732,6 @@ func asyncTypeFromString(tp string) GDBAsyncType {
 
 func createAsync(res *gdb_async) (*GDBEvent, error) {
 	var result GDBEvent
-	fmt.Printf(" ------> %s\n", res.Line())
 	toks := strings.SplitN(res.Line(), ",", 2)
 	result.Type = asyncTypeFromString(toks[0])
 	sub := []byte(res.Line())[len(result.Type.String())+1:]
@@ -735,6 +745,8 @@ func createAsync(res *gdb_async) (*GDBEvent, error) {
 		result.ThreadId = strct.get_string("thread-id", "")
 		result.StoppedThreads = strct.get_string("stopped-threads", "")
 		result.StopCore = strct.get_string("core", "")
+		result.SignalName = strct.get_string("signal-name", "")
+		result.SignalMeaning = strct.get_string("signal-meaning", "")
 		frame, ok := strct["frame"]
 		if ok {
 			sinfo, err := stackFrameInfo(frame.(gdbStruct))
@@ -744,10 +756,9 @@ func createAsync(res *gdb_async) (*GDBEvent, error) {
 				fa := frameArguments(faargs.([]interface{}))
 				result.CurrentStackArguments = &fa
 			} else {
-				log.Printf("Error getting stackframeinfo: %v", err)
+				//log.Printf("Error getting stackframeinfo: %v", err)
 			}
 		}
-		fmt.Printf("FRAME INFO %+v", frame)
 		reason := strct.get_string("reason", "")
 		sr, ok := StopReasonWithName(reason)
 		if !ok {
@@ -870,6 +881,17 @@ func (gdb *GDB) Inferior_tty_set(tty string) (*GDBResult, error) {
 	return gdb.send(c)
 }
 
+func (gdb *GDB) Set(key, val string) (*GDBResult, error) {
+	c := newCommand("gdb-set")
+	c.add_param(key)
+	c.add_param(val)
+	return gdb.send(c)
+}
+
+func (gdb *GDB) SetAsync() (*GDBResult, error) {
+	return gdb.Set("target-async", "1")
+}
+
 func (gdb *GDB) Exec_next(reverse bool) (*GDBResult, error) {
 	return reverse_command(gdb, "exec-next", reverse)
 }
@@ -894,8 +916,21 @@ func (gdb *GDB) Exec_return() (*GDBResult, error) {
 	return gdb.send(c)
 }
 
-func (gdb *GDB) Exec_run(all bool, threadgroup *int) (*GDBResult, error) {
+func (gdb *GDB) Exec_run(all bool, start bool, threadgroup *int) (*GDBResult, error) {
 	c := newCommand("exec-run")
+	if all {
+		c.add_option("--all")
+	}
+	if start {
+		c.add_option("--start")
+	}
+	if threadgroup != nil {
+		c.add_option_intvalue("--thread-group", threadgroup)
+	}
+	return gdb.send(c)
+}
+func (gdb *GDB) Exec_interrupt(all bool, threadgroup *int) (*GDBResult, error) {
+	c := newCommand("exec-interrupt")
 	if all {
 		c.add_option("--all")
 	}
@@ -904,6 +939,7 @@ func (gdb *GDB) Exec_run(all bool, threadgroup *int) (*GDBResult, error) {
 	}
 	return gdb.send(c)
 }
+
 func (gdb *GDB) Exec_continue(all bool, reverse bool, threadgroup *int) (*GDBResult, error) {
 	c := newCommand("exec-continue")
 	if all {

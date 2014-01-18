@@ -52,6 +52,21 @@ func parseStackFrameInfo(info string) (*StackFrame, error) {
 	return stackFrameInfo(parseStructure(info))
 }
 
+func parseStackFrameArray(info string) (*[]StackFrame, error) {
+	var result []StackFrame
+	args := parseStructureArray(info)
+	for _, arg := range args {
+		sf := arg.(gdbStruct)
+		framemap := sf["frame"]
+		frame := framemap.(gdbStruct)
+		sfi, err := stackFrameInfo(frame)
+		if err == nil {
+			result = append(result, *sfi)
+		}
+	}
+	return &result, nil
+}
+
 func frameArguments(args []interface{}) []FrameArgument {
 	var result []FrameArgument
 	for _, sa := range args {
@@ -63,6 +78,11 @@ func frameArguments(args []interface{}) []FrameArgument {
 		result = append(result, *fa)
 	}
 	return result
+}
+
+func parseFrameArguments(info string) (*[]FrameArgument, error) {
+	result := frameArguments(parseStructureArray(info))
+	return &result, nil
 }
 
 func parseStackFrameArguments(info string) (*[]StackFrameArguments, error) {
@@ -80,20 +100,15 @@ func parseStackFrameArguments(info string) (*[]StackFrameArguments, error) {
 	return &result, nil
 }
 
-func (gdb *GDB) Stack_list_locals(listtype StackListType) (string, error) {
-	return gdb.stack_list("stack-list-locals", listtype)
-}
-func (gdb *GDB) Stack_list_variables(listtype StackListType) (string, error) {
-	return gdb.stack_list("stack-list-variables", listtype)
-}
-func (gdb *GDB) stack_list(listcommand string, listtype StackListType) (string, error) {
-	c := newCommand(listcommand)
+func (gdb *GDB) Stack_list_variables(listtype StackListType) (*[]FrameArgument, error) {
+	c := newCommand("stack-list-variables")
 	c.add_param(fmt.Sprintf("%d", int(listtype)))
 	res, err := gdb.send(c)
-	if err == nil {
-		return res.Results, err
+	if err != nil {
+		return nil, err
 	}
-	return "", err
+	data := cutoff(res.Results, "variables=", false)
+	return parseFrameArguments(data)
 }
 func (gdb *GDB) Stack_info_frame() (*StackFrame, error) {
 	c := newCommand("stack-info-frame")
@@ -116,6 +131,23 @@ func (gdb *GDB) Stack_info_depth(maxdepth *int) (int, error) {
 	}
 
 	return strconv.Atoi(cutoff(res.Results, "depth=", true))
+}
+
+func (gdb *GDB) Stack_list_allframes() (*[]StackFrame, error) {
+	return gdb.Stack_list_frames(false, nil, nil)
+}
+
+func (gdb *GDB) Stack_list_frames(noframefilter bool, from, to *int) (*[]StackFrame, error) {
+	c := newCommand("stack-list-frames").
+		add_option_when(noframefilter, "--no-frame-filters").
+		add_existing_int(from).
+		add_existing_int(to)
+	res, err := gdb.send(c)
+	if err != nil {
+		return nil, err
+	}
+	data := cutoff(res.Results, "stack=", false)
+	return parseStackFrameArray(data)
 }
 
 func (gdb *GDB) Stack_list_arguments(lsttype StackListType, lowframe *int, highframe *int) (*[]StackFrameArguments, error) {

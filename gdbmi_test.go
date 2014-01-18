@@ -87,7 +87,7 @@ func TestNewGDB(t *testing.T) {
 	}*/
 	//r, err := gdb.Break_commands(bp.Number, "continue")
 	//log.Printf("break_commands: %+v, %s", r, err)
-	res, err := gdb.Exec_run(false, nil)
+	res, err := gdb.Exec_run(false, false, nil)
 	if err != nil {
 		log.Printf("exec error: %+s", err)
 	} else {
@@ -107,8 +107,8 @@ func TestNewGDB(t *testing.T) {
 				if ev.Type == Async_stopped {
 					sf, e := gdb.Stack_info_frame()
 					log.Printf("--> %+v:%s\n", sf, e)
-					s, e := gdb.Stack_list_locals(ListType_all_values)
-					log.Printf("--> %s:%s\n", s, e)
+					s, e := gdb.Stack_list_variables(ListType_all_values)
+					log.Printf("--> %v:%s\n", s, e)
 					gs, e := gdb.Stack_list_arguments(ListType_all_values, nil, nil)
 					log.Printf("--> %+v:%s\n", gs, e)
 				}
