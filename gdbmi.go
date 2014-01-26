@@ -716,8 +716,10 @@ func splitKVList(kvlist string) map[string]string {
 	parts := strings.Split(kvlist, ",")
 	for _, p := range parts {
 		kv := strings.Split(p, "=")
-		val := string([]byte(kv[1])[1 : len(kv[1])-1])
-		res[kv[0]] = val
+		if len(kv) > 1 {
+			val := string([]byte(kv[1])[1 : len(kv[1])-1])
+			res[kv[0]] = val
+		}
 	}
 	return res
 }
