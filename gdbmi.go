@@ -573,7 +573,6 @@ func (gdb *GDB) Close() {
 func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error {
 	cmd := exec.Command(gdbpath, gdbargs...)
 	cmd.Env = env
-	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: 9}
 
 	pipe, err := cmd.StdoutPipe()
 
