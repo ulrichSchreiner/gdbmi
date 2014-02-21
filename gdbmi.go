@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -573,6 +574,8 @@ func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error 
 	cmd := exec.Command(gdbpath, gdbargs...)
 	cmd.Env = env
 
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
 	pipe, err := cmd.StdoutPipe()
 
 	if err != nil {
@@ -674,6 +677,7 @@ func (gdb *GDB) parse_gdb_output() {
 		}
 		ln = bytes.TrimSpace(ln)
 		sline := string(ln)
+		fmt.Printf(" --> %s\n", sline)
 		if gdb_delim.Match(sline) {
 			continue
 		} else {
@@ -681,6 +685,8 @@ func (gdb *GDB) parse_gdb_output() {
 			for _, rt := range gdb_responses {
 				if rt.Match(sline) {
 					found = true
+					fmt.Printf(" --> create %#v - %s\n", rt, sline)
+
 					rsp := rt.Create(sline)
 					gdb.result <- rsp
 				}
@@ -696,6 +702,7 @@ func (gdb *GDB) parse_gdb_output() {
 }
 
 func (gdb *GDB) send_to_gdb(cmd *gdb_command) {
+	fmt.Printf("<-- %s\n", cmd.dump_mi())
 	fmt.Fprintln(gdb.stdin, cmd.dump_mi())
 }
 
