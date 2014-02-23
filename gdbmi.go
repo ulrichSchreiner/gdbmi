@@ -491,7 +491,7 @@ type GDBEvent struct {
 	StopReason            GDBStopReason    `json:"stopReason"`
 	ThreadId              string           `json:"threadId"`
 	ThreadGroupid         string           `json:"threadGroupId"`
-	StoppedThreads        string           `json:"stoppendThreads"`
+	StoppedThreads        []string         `json:"stoppendThreads"`
 	StopCore              string           `json:"stopCopre"`
 	Pid                   int              `json:"pid"`
 	ExitCode              int              `json:"exitCode"`
@@ -519,6 +519,7 @@ type GDB struct {
 	DebuggerProcess  *os.Process
 	TargetConsoleOut io.Reader
 	TargetConsoleIn  io.Writer
+	Running          bool
 
 	quit     chan bool
 	stdout   io.ReadCloser
@@ -638,7 +639,7 @@ func startupGDB(gdb *GDB, gdbpath string, gdbargs []string, env []string) error 
 				case *gdb_log_output:
 					break
 				case *gdb_async:
-					ev, err := createAsync(rt)
+					ev, err := createAsync(gdb, rt)
 					if err != nil {
 					} else {
 						go func() {
@@ -677,7 +678,6 @@ func (gdb *GDB) parse_gdb_output() {
 		}
 		ln = bytes.TrimSpace(ln)
 		sline := string(ln)
-		fmt.Printf(" --> %s\n", sline)
 		if gdb_delim.Match(sline) {
 			continue
 		} else {
@@ -685,8 +685,6 @@ func (gdb *GDB) parse_gdb_output() {
 			for _, rt := range gdb_responses {
 				if rt.Match(sline) {
 					found = true
-					fmt.Printf(" --> create %#v - %s\n", rt, sline)
-
 					rsp := rt.Create(sline)
 					gdb.result <- rsp
 				}
@@ -702,7 +700,6 @@ func (gdb *GDB) parse_gdb_output() {
 }
 
 func (gdb *GDB) send_to_gdb(cmd *gdb_command) {
-	fmt.Printf("<-- %s\n", cmd.dump_mi())
 	fmt.Fprintln(gdb.stdin, cmd.dump_mi())
 }
 
@@ -740,7 +737,7 @@ func asyncTypeFromString(tp string) GDBAsyncType {
 	return t
 }
 
-func createAsync(res *gdb_async) (*GDBEvent, error) {
+func createAsync(gdb *GDB, res *gdb_async) (*GDBEvent, error) {
 	var result GDBEvent
 	toks := strings.SplitN(res.Line(), ",", 2)
 	result.Type = asyncTypeFromString(toks[0])
@@ -748,12 +745,14 @@ func createAsync(res *gdb_async) (*GDBEvent, error) {
 	params := splitKVList(string(sub))
 	switch result.Type {
 	case Async_running:
+		gdb.Running = true
 		result.ThreadId = async_running_line.ReplaceAllString(res.Line(), "$1")
 		return &result, nil
 	case Async_stopped:
+		gdb.Running = false
 		strct := parseStructure(fmt.Sprintf("{%s}", sub))
 		result.ThreadId = strct.get_string("thread-id", "")
-		result.StoppedThreads = strct.get_string("stopped-threads", "")
+		result.StoppedThreads = strct.get_string_array("stopped-threads")
 		result.StopCore = strct.get_string("core", "")
 		result.SignalName = strct.get_string("signal-name", "")
 		result.SignalMeaning = strct.get_string("signal-meaning", "")
@@ -900,6 +899,10 @@ func (gdb *GDB) Set(key, val string) (*GDBResult, error) {
 
 func (gdb *GDB) SetAsync() (*GDBResult, error) {
 	return gdb.Set("target-async", "1")
+}
+
+func (gdb *GDB) SetNonstop() (*GDBResult, error) {
+	return gdb.Set("non-stop", "on")
 }
 
 func (gdb *GDB) Exec_next(reverse bool) (*GDBResult, error) {

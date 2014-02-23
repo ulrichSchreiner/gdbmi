@@ -16,6 +16,19 @@ func (s *gdbStruct) get_string(k string, def string) string {
 	return def
 }
 
+func (s *gdbStruct) get_string_array(k string) []string {
+	v, ok := (*s)[k]
+	if ok {
+		string_ar := v.([]interface{})
+		var res []string
+		for _, sa := range string_ar {
+			res = append(res, sa.(string))
+		}
+		return res
+	}
+	return []string{}
+}
+
 var assignment []byte = []byte("=")
 
 func parseStructure(input string) gdbStruct {
